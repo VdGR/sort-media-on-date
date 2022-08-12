@@ -13,7 +13,7 @@ import filetype
 in_dir = str(input(f"Input folder? (media/): ") or "media\\")
 out_dir = str(input(f"Output folder? (out/): ") or "out\\")
 
-FOLDER_FORMAT = "%Y_%m_%d"
+FOLDER_FORMAT = "%Y/%m/%d"
 errors = ""
 #shutil.copy(f, os.path.join(to_dir,filename))
 
@@ -77,41 +77,44 @@ def move_file(f,f_new):
     except FileExistsError:
         printerr(f"[!] Error {f_new} already exist")
 
+def main():
+    #Loop over all folders/subfolders/files
+    for root, subdirectories, files in os.walk(in_dir):
+        for subdirectory in subdirectories:
+            dir = os.path.join(root, subdirectory)
 
-#Loop over all folders/subfolders/files
-for root, subdirectories, files in os.walk(in_dir):
-    for subdirectory in subdirectories:
-        dir = os.path.join(root, subdirectory)
+            #print(f"[+] {dir} contains {len(dir)}# files")
 
-        #print(f"[+] {dir} contains {len(dir)}# files")
+        for file in files:
+            f = os.path.join(root, file)
 
-    for file in files:
-        f = os.path.join(root, file)
+            try:
+                if filetype.is_image(f):
+                    creation_date = get_exif_creation_date(f)
+                    if creation_date is None: 
+                        printerr(f'[!] Error with {f} no creation date')
+                        continue
+                    if creation_date > datetime.now():
+                        printerr(f"[!] Error {f} is older than today?")
+                        continue
 
-        try:
-            if filetype.is_image(f):
-                creation_date = get_exif_creation_date(f)
-                if creation_date is None: 
-                    printerr(f'[!] Error with {f} no creation date')
-                    continue
-                if creation_date > datetime.now():
-                    printerr(f"[!] Error {f} is older than today?")
-                    continue
-
-            #Use the creation date to get the selected folder
-            selected_folder = os.path.join(out_dir,datetime.strftime(creation_date,FOLDER_FORMAT))
-        
-            #Check if the selectd folder already exists otherwise create it
-            create_dir_if_not_exist(selected_folder)
-            #Moving the file to the selected folder
-            f_new = os.path.join(selected_folder,file)
-            move_file(f,f_new)
-        
-        except Exception as e:
-            printerr(f"[!] Error {e}")
-            continue
+                #Use the creation date to get the selected folder
+                selected_folder = os.path.join(out_dir,datetime.strftime(creation_date,FOLDER_FORMAT))
+            
+                #Check if the selectd folder already exists otherwise create it
+                create_dir_if_not_exist(selected_folder)
+                #Moving the file to the selected folder
+                f_new = os.path.join(selected_folder,file)
+                move_file(f,f_new)
+            
+            except Exception as e:
+                printerr(f"[!] Error {e}")
+                continue
 
 
-f = open("errors.txt", "w")
-f.write(errors)
-f.close()
+    f = open("errors.txt", "w")
+    f.write(errors)
+    f.close()
+
+if __name__ == "__main__":
+    main()
