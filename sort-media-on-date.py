@@ -9,6 +9,8 @@ import subprocess
 from datetime import datetime
 from unittest import skip
 import filetype
+from dateutil import parser
+import hashlib
 
 in_dir = str(input(f"Input folder? (media/): ") or "media\\")
 out_dir = str(input(f"Output folder? (out/): ") or "out\\")
@@ -41,7 +43,7 @@ def get_exif_info(path):
     try:
         return out.decode("utf-8").split("\n")
     except UnicodeDecodeError:
-        printerr(f'[!] Error with decoding for {path}')
+        #printerr(f'[!] Error with decoding for {path}')
         return None
         
 
@@ -53,7 +55,7 @@ def get_exif_creation_date(path):
     #Loop over the exiftool output and get the "Create Data tag"
     exif_data = get_exif_info(path)
     if exif_data is None: 
-        printerr(f'[!] Error no exif data for {path}')
+        #printerr(f'[!] Error no exif data for {path}')
         return None
     for l in exif_data:
         if EXIFTOOL_DATE_TAG_VIDEOS in str(l):
@@ -69,13 +71,31 @@ def get_exif_creation_date(path):
                     return datetime.strptime(datetime_str, EXIF_DATE_FORMAT_TZ)
                     
 
+def get_hash(file):
+   #programiz.com/python-programming/examples/hash-file
+
+   h = hashlib.sha1()
+
+   # open file for reading in binary mode
+   with open(file,'rb') as file:
+
+       # loop till the end of the file
+       chunk = 0
+       while chunk != b'':
+           # read only 1024 bytes at a time
+           chunk = file.read(1024)
+           h.update(chunk)
+
+   return h.hexdigest()
 
 def move_file(f,f_new):
     try:
         os.rename(f, f_new)
         print(f"[+] Moving {f} to {f_new}")
     except FileExistsError:
-        printerr(f"[!] Error {f_new} already exist")
+        if get_hash(f) == get_hash(f_new):
+            os.remove(f)
+            printerr(f"[!] Removing '{f}'")
 
 def main():
     #Loop over all folders/subfolders/files
@@ -92,20 +112,29 @@ def main():
                 if filetype.is_image(f):
                     creation_date = get_exif_creation_date(f)
                     if creation_date is None: 
-                        printerr(f'[!] Error with {f} no creation date')
-                        continue
+                        #If there is no exif creation date, we can check the filename for a date
+                        try:
+                            found_date = parser.parse(file, fuzzy=True)
+                            #It find dates in names like 'imagesVF9MNS0L.jpg'???
+                            if str(datetime.strftime(found_date,'%Y%m%d')) in file:
+                                creation_date = found_date
+                        except Exception as e:
+                            #print(f"[!] {e}")
+                            continue
+                    if creation_date is None:
+                        continue   
                     if creation_date > datetime.now():
-                        printerr(f"[!] Error {f} is older than today?")
+                        #printerr(f"[!] Error {f} is older than today?")
                         continue
 
-                #Use the creation date to get the selected folder
-                selected_folder = os.path.join(out_dir,datetime.strftime(creation_date,FOLDER_FORMAT))
-            
-                #Check if the selectd folder already exists otherwise create it
-                create_dir_if_not_exist(selected_folder)
-                #Moving the file to the selected folder
-                f_new = os.path.join(selected_folder,file)
-                move_file(f,f_new)
+                    #Use the creation date to get the selected folder
+                    selected_folder = os.path.join(out_dir,datetime.strftime(creation_date,FOLDER_FORMAT))
+                
+                    #Check if the selectd folder already exists otherwise create it
+                    create_dir_if_not_exist(selected_folder)
+                    #Moving the file to the selected folder
+                    f_new = os.path.join(selected_folder,file)
+                    move_file(f,f_new)
             
             except Exception as e:
                 printerr(f"[!] Error {e}")
